@@ -1,0 +1,12 @@
+# Local development server — not a Vercel function
+main.py
+
+# Python virtual environment
+venv/
+
+# Local secrets
+.env
+
+# Byte-compiled files
+__pycache__/
+*.pyc
