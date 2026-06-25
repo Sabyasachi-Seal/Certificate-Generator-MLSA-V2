@@ -5,7 +5,7 @@ Runs a lightweight HTTP server so you can test the full stack locally
 without deploying to Vercel.
 
 Usage:
-    pip install weasyprint resend
+    pip install xhtml2pdf resend
     cp .env.example .env          # fill in your keys
     python main.py
 

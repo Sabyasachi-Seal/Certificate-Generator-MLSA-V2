@@ -69,17 +69,25 @@ def render_email(name: str, event: str) -> str:
 
 def html_to_pdf(html: str) -> bytes:
     try:
-        import weasyprint  # type: ignore
+        from xhtml2pdf import pisa  # type: ignore
     except ImportError as exc:
         raise RuntimeError(
-            "WeasyPrint is not installed. Run: pip install weasyprint"
+            "xhtml2pdf is not installed. Run: pip install xhtml2pdf"
         ) from exc
 
-    # base_url lets WeasyPrint resolve relative assets (background.png, fonts)
-    return weasyprint.HTML(
-        string=html,
-        base_url=str(CERT_DIR),
-    ).write_pdf()
+    import io
+
+    buf = io.BytesIO()
+    result = pisa.CreatePDF(
+        src=html,
+        dest=buf,
+        encoding="utf-8",
+        # Resolve relative assets (background.png, fonts) from the template dir
+        path=str(CERT_DIR) + "/",
+    )
+    if result.err:
+        raise RuntimeError(f"PDF generation failed with {result.err} error(s)")
+    return buf.getvalue()
 
 # ── Email sending ─────────────────────────────────────────────────────────────
 
