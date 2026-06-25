@@ -1,0 +1,75 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: "Gill Sans MT", sans-serif;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background-color: #f0f0f0;
+}
+
+.certificate {
+  position: relative;
+  width: 1053px;
+  height: 757px;
+  background-image: url("background.png");
+  background-size: cover;
+  background-position: center;
+  overflow: hidden;
+}
+
+.certificate-content {
+  position: absolute;
+  left: 80px;
+  top: 140px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.label {
+  font-size: 20px;
+  margin-bottom: 10px;
+}
+
+.name {
+  font-family: "Palatino Linotype", serif;
+  font-size: 36px;
+  font-weight: bold;
+  margin-bottom: 30px;
+  color: rgb(0, 119, 255);
+}
+
+.description {
+  width: 700px;
+  font-size: 20px;
+  margin-bottom: 10px;
+}
+
+.event {
+  font-family: "Palatino Linotype", serif;
+  font-size: 42px;
+  font-weight: bold;
+  margin-bottom: 60px;
+}
+
+.host-label {
+  font-size: 16px;
+  margin-bottom: 8px;
+}
+
+.host {
+  font-family: "Palatino Linotype", serif;
+  font-size: 30px;
+  font-weight: bold;
+  margin-bottom: 12px;
+}
+
+.ambassador {
+  font-size: 16px;
+}

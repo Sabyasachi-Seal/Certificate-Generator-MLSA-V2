@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MLSA Certificate Generator</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <!-- ── Header ──────────────────────────────────────────────────────────── -->
+    <header class="app-header">
+      <div class="header-inner">
+        <img
+          src="https://upload.wikimedia.org/wikipedia/commons/9/96/Microsoft_logo_%282012%29.svg"
+          alt="Microsoft"
+          class="ms-logo"
+        />
+        <div class="header-divider"></div>
+        <div class="header-text">
+          <span class="brand-name">Learn Student Ambassadors</span>
+          <span class="app-name">Certificate Generator</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="app-main">
+      <!-- ── Step 1: Event Details ─────────────────────────────────────────── -->
+      <section class="card" id="step-config">
+        <div class="step-header">
+          <div class="step-badge">1</div>
+          <div>
+            <h2>Event Details</h2>
+            <p class="step-desc">Default values for all certificates.</p>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="global-event"
+              >Event Name <span class="required-star">*</span></label
+            >
+            <input
+              type="text"
+              id="global-event"
+              placeholder="e.g. Azure Fundamentals Workshop"
+              autocomplete="off"
+              required
+            />
+          </div>
+          <div class="form-group">
+            <label for="global-host"
+              >Host Name <span class="required-star">*</span></label
+            >
+            <input
+              type="text"
+              id="global-host"
+              placeholder="e.g. John Smith"
+              autocomplete="off"
+              required
+            />
+          </div>
+        </div>
+        <p class="note">
+          These defaults apply when your spreadsheet doesn't include
+          <code>Event</code> or <code>Host</code> columns.
+        </p>
+      </section>
+
+      <!-- ── Step 2: Import Recipients ─────────────────────────────────────── -->
+      <section class="card" id="step-data">
+        <div class="step-header">
+          <div class="step-badge">2</div>
+          <div>
+            <h2>Import Recipients</h2>
+            <p class="step-desc">
+              Copy rows from Excel or Google Sheets and paste below.
+            </p>
+          </div>
+        </div>
+
+        <div class="columns-hint">
+          <span class="col-tag col-required">Name</span>
+          <span class="col-tag col-required">Email</span>
+          <span class="col-tag col-optional">Event&nbsp;(optional)</span>
+          <span class="col-tag col-optional">Host&nbsp;(optional)</span>
+        </div>
+
+        <div class="paste-wrapper">
+          <textarea
+            id="paste-area"
+            placeholder="Paste spreadsheet data here (Ctrl+V or ⌘V)…
+
+Example:
+Name&#9;Email&#9;Event
+Jane Doe&#9;jane@example.com&#9;Azure Workshop
+John Smith&#9;john@example.com&#9;Azure Workshop"
+            spellcheck="false"
+          ></textarea>
+        </div>
+
+        <div class="action-row">
+          <button class="btn btn-primary" id="btn-parse">Parse Data</button>
+          <button class="btn btn-ghost" id="btn-clear">Clear</button>
+          <span class="status-text" id="parse-status"></span>
+        </div>
+
+        <!-- Parse error + format guide (shown only on failure) -->
+        <div id="parse-error-box" class="parse-error-box hidden">
+          <div class="parse-error-header">
+            <span class="parse-error-icon">⚠</span>
+            <strong id="parse-error-title"></strong>
+          </div>
+          <p class="parse-error-body">
+            Make sure your data has a <strong>header row</strong> with these
+            column names (column order doesn't matter):
+          </p>
+          <div class="parse-error-columns">
+            <div class="pec-row">
+              <span class="col-tag col-required">Name</span>
+              <span class="pec-desc">Required — recipient's full name</span>
+            </div>
+            <div class="pec-row">
+              <span class="col-tag col-required">Email</span>
+              <span class="pec-desc">Required — a valid email address</span>
+            </div>
+            <div class="pec-row">
+              <span class="col-tag col-optional">Event</span>
+              <span class="pec-desc"
+                >Optional — overrides the Event Name field above</span
+              >
+            </div>
+            <div class="pec-row">
+              <span class="col-tag col-optional">Host</span>
+              <span class="pec-desc"
+                >Optional — overrides the Host Name field above</span
+              >
+            </div>
+          </div>
+          <p class="parse-error-example">
+            Example (copy from Excel or Google Sheets):
+          </p>
+          <pre class="parse-error-code">
+Name	Email	Event
+Jane Doe	jane@example.com	Azure Workshop
+John Smith	john@example.com	Azure Workshop</pre
+          >
+        </div>
+
+        <div id="table-wrapper" class="hidden">
+          <p class="table-meta" id="table-meta"></p>
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Event</th>
+                  <th>Host</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="data-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Step 3: Preview ───────────────────────────────────────────────── -->
+      <section class="card hidden" id="step-preview">
+        <div class="step-header">
+          <div class="step-badge">3</div>
+          <div>
+            <h2>Preview</h2>
+            <p class="step-desc" id="preview-label"></p>
+          </div>
+          <button class="btn btn-ghost btn-sm close-btn" id="btn-close-preview">
+            ✕ Close
+          </button>
+        </div>
+        <div class="preview-nav">
+          <button class="btn btn-ghost btn-sm" id="btn-prev">← Prev</button>
+          <span id="preview-counter" class="preview-counter-text"></span>
+          <button class="btn btn-ghost btn-sm" id="btn-next">Next →</button>
+        </div>
+        <div class="iframe-wrapper" id="iframe-wrapper">
+          <iframe
+            id="cert-iframe"
+            title="Certificate Preview"
+            sandbox="allow-same-origin"
+          ></iframe>
+        </div>
+      </section>
+
+      <!-- ── Step 4: Generate & Send ───────────────────────────────────────── -->
+      <section class="card" id="step-send">
+        <div class="step-header">
+          <div class="step-badge">4</div>
+          <div>
+            <h2>Generate &amp; Send</h2>
+            <p class="step-desc">
+              Generates a PDF certificate for each recipient and sends it by
+              email.
+            </p>
+          </div>
+        </div>
+
+        <div class="send-area">
+          <button class="btn btn-primary btn-large" id="btn-send-all" disabled>
+            ✉&nbsp;&nbsp;Send All Certificates
+          </button>
+          <span class="recipient-count" id="recipient-count"></span>
+        </div>
+
+        <div id="progress-area" class="hidden">
+          <div class="progress-track">
+            <div class="progress-fill" id="progress-fill"></div>
+          </div>
+          <p class="progress-label" id="progress-label">Sending…</p>
+        </div>
+
+        <ul class="results-list hidden" id="results-list"></ul>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

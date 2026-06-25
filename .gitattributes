@@ -1,0 +1,25 @@
+# Enforce consistent line endings for all text files checked into Git.
+# Developers on Windows get CRLF locally; the repo stores LF.
+* text=auto eol=lf
+
+# Force LF for source files regardless of OS
+*.py    text eol=lf
+*.js    text eol=lf
+*.html  text eol=lf
+*.css   text eol=lf
+*.json  text eol=lf
+*.md    text eol=lf
+*.txt   text eol=lf
+*.env*  text eol=lf
+
+# Binary assets — no line-ending conversion, no diff noise
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.pdf   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.otf   binary
