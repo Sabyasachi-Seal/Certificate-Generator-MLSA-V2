@@ -2,22 +2,35 @@
 MLSA Certificate Generator — Serverless API
 POST /api/send
 
-Accepts a list of recipients, renders an HTML certificate for each one,
-converts it to PDF with WeasyPrint, then emails it via Resend.
+Accepts a list of recipients (max 50), renders an HTML certificate for each one,
+converts it to PDF with xhtml2pdf, then emails it via Gmail SMTP (or any SMTP
+server) with the PDF attached.  A single SMTP connection is reused for the
+whole batch to stay well within Vercel's function timeout.
 
 Environment variables (set in Vercel dashboard or .env):
-    RESEND_API_KEY   — Resend API key (required)
-    EMAIL_FROM       — Verified sender address, e.g. "Certs <certs@yourdomain.com>"
+    SMTP_HOST      — SMTP server hostname          (default: smtp.gmail.com)
+    SMTP_PORT      — SMTP port, STARTTLS           (default: 587)
+    SMTP_USER      — Gmail address, e.g. you@gmail.com
+    SMTP_PASSWORD  — Gmail App Password (16 chars, no spaces)
+    EMAIL_FROM     — Display name + address, e.g. "Certs <you@gmail.com>"
+                     Falls back to SMTP_USER when omitted.
 """
 
 from __future__ import annotations
 
-import base64
 import json
 import os
 import re
+import smtplib
+from email.mime.application import MIMEApplication
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
+
+# ── Constants ─────────────────────────────────────────────────────────────────
+
+MAX_RECIPIENTS = 50
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 
@@ -89,52 +102,85 @@ def html_to_pdf(html: str) -> bytes:
         raise RuntimeError(f"PDF generation failed with {result.err} error(s)")
     return buf.getvalue()
 
-# ── Email sending ─────────────────────────────────────────────────────────────
+# ── SMTP helpers ──────────────────────────────────────────────────────────────
 
-def send_email(
+def _open_smtp() -> smtplib.SMTP:
+    """Open and authenticate a single SMTP connection reused for the whole batch."""
+    host     = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+    port     = int(os.environ.get("SMTP_PORT", "587"))
+    user     = os.environ.get("SMTP_USER", "").strip()
+    password = os.environ.get("SMTP_PASSWORD", "").strip()
+
+    if not user or not password:
+        raise RuntimeError(
+            "SMTP_USER and SMTP_PASSWORD environment variables must be set. "
+            "For Gmail, use your Gmail address and a 16-character App Password "
+            "(Google Account → Security → 2-Step Verification → App passwords)."
+        )
+
+    smtp = smtplib.SMTP(host, port, timeout=30)
+    smtp.ehlo()
+    smtp.starttls()
+    smtp.ehlo()
+    smtp.login(user, password)
+    return smtp
+
+
+def _build_message(
+    from_addr: str,
     to_email: str,
     to_name: str,
     event: str,
     pdf_bytes: bytes,
     email_html: str,
-) -> None:
-    try:
-        import resend  # type: ignore
-    except ImportError as exc:
-        raise RuntimeError(
-            "resend is not installed. Run: pip install resend"
-        ) from exc
-
-    api_key = os.environ.get("RESEND_API_KEY", "")
-    if not api_key:
-        raise RuntimeError(
-            "RESEND_API_KEY environment variable is not set. "
-            "Add it in the Vercel dashboard under Settings → Environment Variables."
-        )
-
-    from_addr = os.environ.get(
-        "EMAIL_FROM",
-        "MLSA Certificates <certificates@yourdomain.com>",
-    )
-
-    resend.api_key = api_key
-
-    # Sanitise filename: keep letters, digits, spaces, hyphens
+) -> MIMEMultipart:
     safe_name = re.sub(r"[^\w\s-]", "", to_name).strip().replace(" ", "_")
     filename  = f"Certificate_{safe_name}.pdf"
 
-    resend.Emails.send({
-        "from":    from_addr,
-        "to":      [to_email],
-        "subject": f"Your Certificate of Participation – {event}",
-        "html":    email_html,
-        "attachments": [
-            {
-                "filename": filename,
-                "content":  base64.b64encode(pdf_bytes).decode("utf-8"),
-            }
-        ],
-    })
+    msg = MIMEMultipart("mixed")
+    msg["From"]    = from_addr
+    msg["To"]      = f"{to_name} <{to_email}>"
+    msg["Subject"] = f"Your Certificate of Participation \u2013 {event}"
+
+    msg.attach(MIMEText(email_html, "html", "utf-8"))
+
+    pdf_part = MIMEApplication(pdf_bytes, _subtype="pdf")
+    pdf_part.add_header("Content-Disposition", "attachment", filename=filename)
+    msg.attach(pdf_part)
+
+    return msg
+
+
+def _send_batch(validated: list[dict], smtp: smtplib.SMTP) -> list[dict]:
+    """Send one email per recipient over an already-open SMTP connection."""
+    smtp_user = os.environ.get("SMTP_USER", "").strip()
+    from_addr = os.environ.get("EMAIL_FROM", smtp_user).strip() or smtp_user
+
+    results: list[dict] = []
+
+    for r in validated:
+        name  = r["name"]
+        email = r["email"]
+        event = r["event"]
+        host  = r["host"]
+
+        try:
+            cert_html  = render_certificate(name, event, host)
+            pdf_bytes  = html_to_pdf(cert_html)
+            email_html = render_email(name, event)
+            msg = _build_message(from_addr, email, name, event, pdf_bytes, email_html)
+            smtp.sendmail(from_addr, [email], msg.as_string())
+            results.append({"name": name, "email": email, "status": "sent"})
+
+        except Exception as exc:  # noqa: BLE001
+            results.append({
+                "name":    name,
+                "email":   email,
+                "status":  "error",
+                "message": str(exc),
+            })
+
+    return results
 
 # ── Validation ────────────────────────────────────────────────────────────────
 
@@ -203,45 +249,54 @@ class handler(BaseHTTPRequestHandler):
         if not isinstance(raw_recipients, list) or not raw_recipients:
             return self._respond(400, {"error": "'recipients' must be a non-empty list"})
 
-        if len(raw_recipients) > 100:
-            return self._respond(400, {"error": "Maximum 100 recipients per request"})
+        if len(raw_recipients) > MAX_RECIPIENTS:
+            return self._respond(400, {
+                "error": (
+                    f"Maximum {MAX_RECIPIENTS} recipients per request. "
+                    f"You submitted {len(raw_recipients)}."
+                )
+            })
 
-        # 3. Process each recipient
-        results: list[dict] = []
+        # 3. Validate every recipient before opening SMTP
+        validated: list[dict] = []
+        pre_errors: list[dict] = []
 
         for raw in raw_recipients:
-            validated = _validate(raw, global_event, global_host)
-
-            if isinstance(validated, str):
-                results.append({
+            result = _validate(raw, global_event, global_host)
+            if isinstance(result, str):
+                pre_errors.append({
                     "name":    str(raw.get("name",  "")),
                     "email":   str(raw.get("email", "")),
                     "status":  "error",
-                    "message": validated,
+                    "message": result,
                 })
-                continue
+            else:
+                validated.append(result)
 
-            name  = validated["name"]
-            email = validated["email"]
-            event = validated["event"]
-            host  = validated["host"]
+        # 4. Open one SMTP connection for the whole batch
+        sent_results: list[dict] = []
 
+        if validated:
+            smtp = None
             try:
-                cert_html  = render_certificate(name, event, host)
-                pdf_bytes  = html_to_pdf(cert_html)
-                email_html = render_email(name, event)
-                send_email(email, name, event, pdf_bytes, email_html)
-                results.append({"name": name, "email": email, "status": "sent"})
-
+                smtp = _open_smtp()
+                sent_results = _send_batch(validated, smtp)
             except Exception as exc:  # noqa: BLE001
-                results.append({
-                    "name":    name,
-                    "email":   email,
-                    "status":  "error",
-                    "message": str(exc),
-                })
+                # Connection-level failure — mark all as errored
+                msg = str(exc)
+                sent_results = [
+                    {"name": r["name"], "email": r["email"],
+                     "status": "error", "message": msg}
+                    for r in validated
+                ]
+            finally:
+                if smtp:
+                    try:
+                        smtp.quit()
+                    except Exception:  # noqa: BLE001
+                        pass
 
-        self._respond(200, {"results": results})
+        self._respond(200, {"results": pre_errors + sent_results})
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 

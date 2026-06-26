@@ -5,7 +5,7 @@
     "functions": {
         "api/send.py": {
             "runtime": "@vercel/python@6.47.1",
-            "maxDuration": 60
+            "maxDuration": 300
         }
     }
 }

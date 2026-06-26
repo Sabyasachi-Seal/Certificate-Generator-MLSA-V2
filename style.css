@@ -230,6 +230,12 @@ input.input-missing:focus {
   border: 1px solid var(--border);
 }
 
+.col-limit {
+  background: #fff4e5;
+  color: #a05000;
+  border: 1px solid #f5c97a;
+}
+
 /* ── Paste textarea ──────────────────────────────────────────────────────── */
 .paste-wrapper { position: relative; }
 

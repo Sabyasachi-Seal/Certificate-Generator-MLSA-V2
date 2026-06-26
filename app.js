@@ -6,6 +6,8 @@ let previewIndex = 0;
 let tmplHtml = null;
 let tmplCss = null;
 
+const MAX_RECIPIENTS = 50;
+
 // ── Validation ────────────────────────────────────────────────────────────────
 
 // Covers the vast majority of real email addresses (RFC 5321 practical subset)
@@ -55,6 +57,7 @@ function refreshSendButton() {
   const invalid = recipients.filter((r) => validateRow(r).length > 0).length;
   const missingEvent = !$("global-event").value.trim();
   const missingHost = !$("global-host").value.trim();
+  const tooMany = total > MAX_RECIPIENTS;
   const btn = $("btn-send-all");
 
   // Visual feedback on the required fields
@@ -68,6 +71,10 @@ function refreshSendButton() {
   }
 
   const reasons = [];
+  if (tooMany)
+    reasons.push(
+      `Max ${MAX_RECIPIENTS} recipients — remove ${total - MAX_RECIPIENTS} row${total - MAX_RECIPIENTS === 1 ? "" : "s"}`,
+    );
   if (missingEvent) reasons.push("Event Name is required");
   if (missingHost) reasons.push("Host Name is required");
   if (invalid > 0)
@@ -286,10 +293,19 @@ function renderTable(data) {
 function _updateTableMeta() {
   const total = recipients.length;
   const invalid = recipients.filter((r) => validateRow(r).length > 0).length;
-  $("table-meta").innerHTML =
-    invalid > 0
-      ? `${total} recipient${total === 1 ? "" : "s"} · <span class="count-error">${invalid} with errors — click any cell to edit</span>`
-      : `${total} recipient${total === 1 ? "" : "s"} · <span class="count-ok">all valid ✓</span>`;
+  const tooMany = total > MAX_RECIPIENTS;
+
+  let meta = `${total} recipient${total === 1 ? "" : "s"}`;
+
+  if (tooMany) {
+    meta += ` · <span class="count-error">max ${MAX_RECIPIENTS} allowed — remove ${total - MAX_RECIPIENTS} row${total - MAX_RECIPIENTS === 1 ? "" : "s"}</span>`;
+  } else if (invalid > 0) {
+    meta += ` · <span class="count-error">${invalid} with errors — click any cell to edit</span>`;
+  } else {
+    meta += ` · <span class="count-ok">all valid ✓</span>`;
+  }
+
+  $("table-meta").innerHTML = meta;
 }
 
 // ── Certificate template ──────────────────────────────────────────────────────
