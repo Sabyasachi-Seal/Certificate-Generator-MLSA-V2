@@ -1,6 +1,6 @@
 {
     "outputDirectory": ".",
-    "buildCommand": "",
+    "buildCommand": "pip install -r requirements.txt",
     "framework": null,
     "functions": {
         "api/send.py": {

@@ -4,8 +4,7 @@ version = "0.1.0"
 description = "MLSA Certificate Generator – serverless PDF & email on Vercel"
 requires-python = ">=3.12"
 dependencies = [
-    "xhtml2pdf>=0.2.16",
-    "weasyprint>=53.3",
+    "reportlab>=4.0.0",
 ]
 
 [tool.vercel]

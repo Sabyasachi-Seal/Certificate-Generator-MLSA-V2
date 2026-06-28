@@ -156,9 +156,6 @@ def html_to_pdf(html: str) -> bytes:
         ) from exc
 
     import io
-    import os
-
-    os.add_dll_directory(r"C:\Program Files (x86)\gtk-3.8.1")
 
     buf = io.BytesIO()
     HTML(string=html).write_pdf(buf)
