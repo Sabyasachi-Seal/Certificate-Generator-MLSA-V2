@@ -69,37 +69,99 @@ def render_certificate(name: str, event: str, host: str) -> str:
     return html
 
 
-def render_email(name: str, event: str) -> str:
+def render_email(name: str, event: str, host: str) -> str:
     html = (EMAIL_DIR / "index.html").read_text(encoding="utf-8")
     css  = (EMAIL_DIR / "email.css").read_text(encoding="utf-8")
 
     html = _inline_css(html, css, "email.css")
     html = html.replace("{NAME}",  _escape_html(name))
     html = html.replace("{EVENT}", _escape_html(event))
+    html = html.replace("{HOST}",  _escape_html(host))
     return html
 
 # ── PDF generation ────────────────────────────────────────────────────────────
 
+def render_certificate_for_pdf(name: str, event: str, host: str) -> str:
+    """
+    Build a self-contained, xhtml2pdf-compatible certificate HTML.
+
+    xhtml2pdf does NOT support background-size, so CSS background-image cannot
+    be scaled to fill the frame.  Instead we layer two position:absolute
+    elements inside a position:relative container:
+      1. An <img> tag stretched to the full 1053×757 canvas (the background).
+      2. A <div> offset to match the original template's content position.
+
+    background.png is embedded as a base64 data URI so no filesystem path
+    resolution is needed at render time.
+    """
+    import base64 as _b64
+
+    bg_path = CERT_DIR / "background.png"
+    if bg_path.is_file():
+        bg_data = _b64.b64encode(bg_path.read_bytes()).decode("ascii")
+        bg_src  = f"data:image/png;base64,{bg_data}"
+    else:
+        bg_src = ""
+
+    # Inline styles — kept as plain strings to avoid f-string brace conflicts.
+    S_PAGE   = "margin:0; padding:0;"
+    S_BODY   = "margin:0; padding:0; font-family:'Gill Sans MT',sans-serif;"
+    S_WRAP   = "position:relative; width:1053px; height:757px; overflow:hidden;"
+    S_BG     = "position:absolute; top:0; left:0; width:1053px; height:757px;"
+    S_CONT   = "position:absolute; top:140px; left:80px; width:900px;"
+    S_LABEL  = "font-size:20px; margin-bottom:10px;"
+    S_NAME   = ("font-family:'Palatino Linotype',serif; font-size:36px; "
+                "font-weight:bold; margin-bottom:30px; color:rgb(0,119,255);")
+    S_DESC   = "width:700px; font-size:20px; margin-bottom:10px;"
+    S_EVENT  = ("font-family:'Palatino Linotype',serif; font-size:42px; "
+                "font-weight:bold; margin-bottom:60px;")
+    S_HLBL   = "font-size:16px; margin-bottom:8px;"
+    S_HOST   = ("font-family:'Palatino Linotype',serif; font-size:30px; "
+                "font-weight:bold; margin-bottom:12px;")
+    S_AMB    = "font-size:16px;"
+
+    n = _escape_html(name)
+    e = _escape_html(event)
+    h = _escape_html(host)
+
+    return (
+        f'<!DOCTYPE html><html><head><meta charset="UTF-8"/>'
+        f'<style>@page{{size:1053px 757px;margin:0;}} *{{box-sizing:border-box;margin:0;padding:0;}}'
+        f'body{{{S_PAGE}}}</style></head>'
+        f'<body style="{S_BODY}">'
+        f'<div style="{S_WRAP}">'
+        f'  <img src="{bg_src}" style="{S_BG}"/>'
+        f'  <div style="{S_CONT}">'
+        f'    <div style="{S_LABEL}">This certificate is presented to:</div>'
+        f'    <div style="{S_NAME}">{n}</div>'
+        f'    <div style="{S_DESC}">In recognition of your attendance and completion'
+        f' of the Microsoft Student Ambassadors</div>'
+        f'    <div style="{S_EVENT}">{e}</div>'
+        f'    <div style="{S_HLBL}">Event Hosted By</div>'
+        f'    <div style="{S_HOST}">{h}</div>'
+        f'    <div style="{S_AMB}">Microsoft Learn Student Ambassador</div>'
+        f'  </div>'
+        f'</div>'
+        f'</body></html>'
+    )
+
+
 def html_to_pdf(html: str) -> bytes:
     try:
-        from xhtml2pdf import pisa  # type: ignore
+        # from xhtml2pdf import pisa  # type: ignore
+        from weasyprint import HTML
     except ImportError as exc:
         raise RuntimeError(
-            "xhtml2pdf is not installed. Run: pip install xhtml2pdf"
+            "WeasyPrint is not installed. Run: pip install weasyprint"
         ) from exc
 
     import io
+    import os
+
+    os.add_dll_directory(r"C:\Program Files (x86)\gtk-3.8.1")
 
     buf = io.BytesIO()
-    result = pisa.CreatePDF(
-        src=html,
-        dest=buf,
-        encoding="utf-8",
-        # Resolve relative assets (background.png, fonts) from the template dir
-        path=str(CERT_DIR) + "/",
-    )
-    if result.err:
-        raise RuntimeError(f"PDF generation failed with {result.err} error(s)")
+    HTML(string=html).write_pdf(buf)
     return buf.getvalue()
 
 # ── SMTP helpers ──────────────────────────────────────────────────────────────
@@ -165,9 +227,9 @@ def _send_batch(validated: list[dict], smtp: smtplib.SMTP) -> list[dict]:
         host  = r["host"]
 
         try:
-            cert_html  = render_certificate(name, event, host)
-            pdf_bytes  = html_to_pdf(cert_html)
-            email_html = render_email(name, event)
+            pdf_html   = render_certificate_for_pdf(name, event, host)
+            pdf_bytes  = html_to_pdf(pdf_html)
+            email_html = render_email(name, event, host)
             msg = _build_message(from_addr, email, name, event, pdf_bytes, email_html)
             smtp.sendmail(from_addr, [email], msg.as_string())
             results.append({"name": name, "email": email, "status": "sent"})
