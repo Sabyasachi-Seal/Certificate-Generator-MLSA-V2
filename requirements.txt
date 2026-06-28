@@ -1,1 +1,1 @@
-reportlab>=4.0.0
+weasyprint>=59.0
